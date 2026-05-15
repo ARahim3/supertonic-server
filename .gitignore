@@ -1,0 +1,29 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# Virtual environments
+.venv
+
+# Generated audio
+*.wav
+*.mp3
+*.opus
+out/
+results/
+
+# Editor / OS
+.DS_Store
+.vscode/
+.idea/
+
+# Local Claude/internal notes
+CLAUDE.md
+.claude/
+
+# Build artifacts
+dist/

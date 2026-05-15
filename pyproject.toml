@@ -1,0 +1,87 @@
+[project]
+name = "supertonic-server"
+version = "0.1.0"
+description = "OpenAI-compatible HTTP server for Supertonic-3 TTS with streaming, voice aliases, and CPU / CoreML / CUDA acceleration."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [{ name = "supertonic-server contributors" }]
+keywords = [
+    "tts",
+    "text-to-speech",
+    "openai",
+    "openai-compatible",
+    "voice-agent",
+    "supertonic",
+    "pipecat",
+    "livekit",
+    "onnx",
+    "onnxruntime",
+    "coreml",
+    "streaming",
+    "on-device",
+    "fastapi",
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Multimedia :: Sound/Audio :: Speech",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Framework :: FastAPI",
+    "Environment :: Web Environment",
+]
+
+dependencies = [
+    "supertonic>=1.2.3",
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.32",
+    "pydantic>=2.7",
+    "pydantic-settings>=2.5",
+    "click>=8.1",
+    "numpy>=1.26",
+    "lameenc>=1.7",
+]
+
+[project.optional-dependencies]
+pipecat = [
+    "pipecat-ai[openai]>=1.0",
+]
+dev = [
+    "httpx>=0.27",
+    "pytest>=8.0",
+    "pytest-asyncio>=0.24",
+    "openai>=1.40",
+]
+
+[project.scripts]
+supertonic-server = "supertonic_server.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/ARahim3/supertonic-server"
+Repository = "https://github.com/ARahim3/supertonic-server"
+Issues = "https://github.com/ARahim3/supertonic-server/issues"
+"Upstream model" = "https://huggingface.co/Supertone/supertonic-3"
+"Upstream code"  = "https://github.com/supertone-inc/supertonic"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/supertonic_server"]
+
+[tool.hatch.build.targets.sdist]
+include = [
+    "src/supertonic_server",
+    "README.md",
+    "Dockerfile",
+    "pyproject.toml",
+    "examples",
+]

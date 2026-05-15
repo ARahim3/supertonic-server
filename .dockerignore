@@ -1,0 +1,11 @@
+.venv
+.git
+.gitignore
+out
+examples
+*.wav
+*.mp3
+*.pcm
+__pycache__
+.pytest_cache
+.DS_Store
