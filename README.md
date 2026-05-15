@@ -1,8 +1,22 @@
 # supertonic-server
 
+[![PyPI](https://img.shields.io/pypi/v/supertonic-server.svg)](https://pypi.org/project/supertonic-server/)
+[![Python](https://img.shields.io/pypi/pyversions/supertonic-server.svg)](https://pypi.org/project/supertonic-server/)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](https://opensource.org/licenses/MIT)
+[![Model: OpenRAIL-M](https://img.shields.io/badge/model-OpenRAIL--M-purple.svg)](https://huggingface.co/Supertone/supertonic-3)
+
 OpenAI-compatible HTTP server for the [Supertonic-3](https://huggingface.co/Supertone/supertonic-3) on-device TTS model — with streaming, voice aliases, multilingual support, and CPU/CoreML/CUDA acceleration.
 
 Drop-in replacement for OpenAI's `/v1/audio/speech` endpoint. Works with the OpenAI Python SDK, [Pipecat](https://github.com/pipecat-ai/pipecat), LiveKit Agents, OpenWebUI, or anything else that speaks the OpenAI TTS protocol — just point it at `http://localhost:8000/v1`.
+
+## Contents
+
+- [Why](#why) · [vs other open-source TTS servers](#vs-other-open-source-tts-servers)
+- [Quick start](#quick-start-local-apple-silicon--linux--windows) · [Docker](#docker) · [CLI](#cli)
+- [Endpoints](#endpoints) · [Voices](#voices) · [Languages](#languages)
+- [Use from: Python SDK](#use-it-from-python-openai-sdk) · [Pipecat](#use-it-from-pipecat) · [LiveKit](#use-it-from-livekit-agents)
+- [Performance](#performance--what-to-expect) · [Tuning](#tuning) · [Troubleshooting](#troubleshooting)
+- [Limitations](#limitations) · [License](#license)
 
 ## Why
 
@@ -16,6 +30,19 @@ Drop-in replacement for OpenAI's `/v1/audio/speech` endpoint. Works with the Ope
 | First-byte latency | ~450–650 ms after warmup (default settings) |
 | Privacy | Fully local — no cloud calls |
 | License | MIT code, OpenRAIL-M weights |
+
+## vs other open-source TTS servers
+
+|  | Local | Streaming | CPU speed | Languages | Quality | Cost |
+|---|:---:|:---:|---|:---:|---|---|
+| **supertonic-server** (this) | ✅ | sentence | RTF 0.1–0.2 (M-series) | 31 | high | free |
+| [Kokoro-FastAPI](https://github.com/remsky/Kokoro-FastAPI) | ✅ | sentence | RTF 0.3–0.5 | ~8 | high | free |
+| [openedai-speech](https://github.com/matatonic/openedai-speech) (Piper) | ✅ | sentence | RTF 0.05–0.1 | ~30 voices | mid | free |
+| [openedai-speech](https://github.com/matatonic/openedai-speech) (XTTS) | ✅ | sentence | RTF 1.0–2.0 | 17 | high | free |
+| ElevenLabs API | ❌ | yes | n/a (cloud) | 29+ | top | paid |
+| OpenAI TTS API | ❌ | yes | n/a (cloud) | 100+ | high | paid |
+
+"Streaming = sentence" means audio is emitted to the client as each sentence finishes synthesizing — what Pipecat and LiveKit consume natively.
 
 ## Quick start (local, Apple Silicon / Linux / Windows)
 
@@ -204,16 +231,26 @@ you really want to.
 - `--max-concurrent 2` — allow two simultaneous syntheses (default 1 to avoid CPU thrashing).
 - `--device cpu` — skip CoreML/CUDA even when available (more predictable cold start).
 
-## Architecture (one paragraph)
+## Troubleshooting
 
-`engine.SupertonicEngine` wraps the supertonic Python SDK, owns the ONNX
-sessions, and exposes an async sentence-level streaming generator. Each request
-splits the input on sentence/clause boundaries, runs each chunk through the
-diffusion pipeline in a `ThreadPoolExecutor` (ONNX releases the GIL), converts
-float32 audio to int16 PCM, and yields the bytes through a small async queue
-that pipelines chunk N+1's synthesis with chunk N's network send. The HTTP
-layer wraps that PCM stream in a format-specific transformer (passthrough,
-streaming-header WAV, lameenc MP3) and returns it as a `StreamingResponse`.
+**First request is very slow (multi-second).** Either you started with `--no-warmup`, or you're using `--reload` and a save triggered a reload. Restart without `--no-warmup`; the warmup synthesis pre-compiles the CoreML/CUDA graphs so the first real request lands warm.
+
+**Model download is slow or hangs on first run.** The Supertonic-3 weights (~250 MB across 26 files) are pulled from Hugging Face into `~/.cache/supertonic3/`. Check your network, or pre-download:
+```bash
+huggingface-cli download Supertone/supertonic-3 --local-dir ~/.cache/supertonic3
+```
+
+**Audio sounds chipmunked, slowed down, or pitched wrong.** A downstream consumer assumed a different sample rate. supertonic-server emits **44100 Hz** mono int16. In Pipecat, pass `sample_rate=44100` to `OpenAITTSService`. In LiveKit, configure the audio source for 44.1 kHz. The `X-Sample-Rate` response header announces this explicitly.
+
+**Pipecat logs `OpenAI TTS only supports 24000Hz sample rate. Current rate of 44100Hz may cause issues.`** Cosmetic — Pipecat hard-codes the OpenAI cloud rate. Audio still flows correctly at 44.1 kHz; the rate is set by our `sample_rate=44100` constructor argument.
+
+**`CoreML does not support shapes with dimension values of 0` warnings on macOS.** Cosmetic. ONNX Runtime falls back the unsupported subgraphs to CPU; everything still works.
+
+**`Context leak detected, msgtracer returned -1`** on macOS. Cosmetic noise from Apple's tracer. Ignore.
+
+**400 from `/v1/audio/speech`.** Body validation failure. Check that `voice` is in the [Voices](#voices) table or a direct F#/M# ID, `lang` is in the [Languages](#languages) list (or `na`), and `response_format` is one of `mp3`, `wav`, `pcm`.
+
+**Empty or truncated audio.** The client closed the connection mid-stream. The server cancels pending synthesis but lets any in-flight chunk finish (no way to interrupt a running ONNX call). Subsequent requests are unaffected.
 
 ## Limitations
 
