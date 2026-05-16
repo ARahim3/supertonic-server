@@ -1,0 +1,1 @@
+{"root":["./src/app.tsx","./src/api.ts","./src/main.tsx","./src/types.ts","./src/components/codesnippet.tsx","./src/components/editor.tsx","./src/components/paramrow.tsx","./src/components/player.tsx","./src/components/topbar.tsx","./src/components/waveform.tsx","./src/lib/langs.ts","./src/lib/snippets.ts"],"version":"5.9.3"}

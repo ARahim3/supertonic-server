@@ -1,0 +1,6 @@
+node_modules
+*.log
+.DS_Store
+.vite
+# NOTE: dist/ is intentionally NOT ignored — we commit the built UI so the
+# Python wheel ships with assets and users don't need npm to run the server.

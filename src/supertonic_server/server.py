@@ -5,11 +5,13 @@ from __future__ import annotations
 import logging
 import time
 from contextlib import asynccontextmanager
+from pathlib import Path
 from typing import Literal, Optional
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from supertonic_server import __version__
@@ -17,6 +19,9 @@ from supertonic_server.audio import MEDIA_TYPES, SUPPORTED_FORMATS, stream_in_fo
 from supertonic_server.config import Settings
 from supertonic_server.engine import SupertonicEngine
 from supertonic_server.voices import OPENAI_VOICE_ALIASES, SUPERTONIC_VOICES, list_voices, resolve_voice
+
+UI_DIR = Path(__file__).parent / "ui" / "dist"
+UI_INDEX = UI_DIR / "index.html"
 
 log = logging.getLogger("supertonic_server")
 
@@ -164,5 +169,23 @@ def build_app(settings: Settings) -> FastAPI:
     async def _unhandled(_: Request, exc: Exception):
         log.exception("Unhandled error")
         return JSONResponse(status_code=500, content={"error": {"message": str(exc), "type": type(exc).__name__}})
+
+    # ---- UI mounting (last, so /v1/* and /healthz take precedence) ----
+    if settings.serve_ui and UI_INDEX.exists():
+        # Vite is configured with `base: '/static/'` so it emits asset URLs like
+        # `/static/assets/index-XXX.js`. We mount `/static` -> the whole dist dir
+        # so that path resolves to `ui/dist/assets/index-XXX.js`.
+        app.mount("/static", StaticFiles(directory=UI_DIR), name="static")
+
+        @app.get("/", include_in_schema=False)
+        async def ui_root() -> FileResponse:
+            return FileResponse(UI_INDEX, media_type="text/html")
+
+        log.info("UI mounted at /  (static assets at /static/)")
+    elif settings.serve_ui:
+        log.warning(
+            "UI requested but built assets not found at %s — run `npm run build` in src/supertonic_server/ui/",
+            UI_INDEX,
+        )
 
     return app

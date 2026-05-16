@@ -1,0 +1,480 @@
+@import "tailwindcss";
+@import "@fontsource-variable/jetbrains-mono";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* =========================================================================
+   "Instrument console" theme — JetBrains Mono everywhere, dark slate base,
+   one phosphor-green accent. Sharp corners, tick-mark rhythm, LED status.
+   ========================================================================= */
+
+@theme {
+  --font-mono: "JetBrains Mono Variable", ui-monospace, "SF Mono", Menlo, monospace;
+  --font-sans: "JetBrains Mono Variable", ui-monospace, monospace;
+
+  /* surfaces */
+  --color-base:        #0a0c0b;
+  --color-surface:     #111513;
+  --color-surface-2:   #171c1a;
+  --color-surface-3:   #1f2624;
+  --color-border:      #232b29;
+  --color-border-2:    #2e3835;
+  --color-border-strong: #404a47;
+
+  /* foreground */
+  --color-fg:          #e8e8e2;
+  --color-fg-2:        #a4ada9;
+  --color-fg-3:        #6a736f;
+  --color-fg-4:        #454d4a;
+
+  /* phosphor — the one accent */
+  --color-phos:        #6ee066;
+  --color-phos-dim:    #4ba645;
+  --color-phos-glow:   rgba(110, 224, 102, 0.18);
+  --color-phos-bg:     rgba(110, 224, 102, 0.08);
+
+  /* status */
+  --color-amber:       #f5b143;
+  --color-amber-bg:    rgba(245, 177, 67, 0.10);
+  --color-red:         #ef6f5e;
+  --color-red-bg:      rgba(239, 111, 94, 0.10);
+}
+
+/* Light theme — paper feel with darker accents */
+:root.light {
+  --color-base:        #f4f3ee;
+  --color-surface:     #ecebe4;
+  --color-surface-2:   #e3e1d9;
+  --color-surface-3:   #d6d3c8;
+  --color-border:      #c5c2b6;
+  --color-border-2:    #b0ad9f;
+  --color-border-strong: #908d80;
+
+  --color-fg:          #16181a;
+  --color-fg-2:        #494d4b;
+  --color-fg-3:        #6f7370;
+  --color-fg-4:        #989b97;
+
+  --color-phos:        #2b8a3e;
+  --color-phos-dim:    #1f6b30;
+  --color-phos-glow:   rgba(43, 138, 62, 0.18);
+  --color-phos-bg:     rgba(43, 138, 62, 0.08);
+}
+
+html, body, #root {
+  height: 100%;
+  font-feature-settings: "ss01", "ss02", "ss03", "cv02", "cv03", "cv04", "calt";
+}
+
+body {
+  font-family: var(--font-mono);
+  /* subtle scan-line texture, almost imperceptible */
+  background-color: var(--color-base);
+  background-image:
+    repeating-linear-gradient(
+      to bottom,
+      transparent 0px,
+      transparent 2px,
+      rgba(255, 255, 255, 0.012) 2px,
+      rgba(255, 255, 255, 0.012) 3px
+    );
+}
+
+:root.light body {
+  background-image:
+    repeating-linear-gradient(
+      to bottom,
+      transparent 0px,
+      transparent 2px,
+      rgba(0, 0, 0, 0.018) 2px,
+      rgba(0, 0, 0, 0.018) 3px
+    );
+}
+
+/* ============== utilities ============== */
+
+@utility label {
+  /* tiny instrument-panel label */
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  font-weight: 500;
+  text-transform: uppercase;
+  color: var(--color-fg-3);
+}
+
+@utility chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.18rem 0.5rem;
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--color-fg-2);
+  font-variant-numeric: tabular-nums;
+}
+
+@utility hairline {
+  background-image: linear-gradient(to right, transparent, var(--color-border-2), transparent);
+  height: 1px;
+}
+
+/* phosphor glow */
+@utility phos-text  { color: var(--color-phos); }
+@utility phos-glow  { text-shadow: 0 0 12px var(--color-phos-glow); }
+
+/* number monospace */
+@utility numb { font-variant-numeric: tabular-nums; letter-spacing: 0.02em; }
+
+/* ============== components ============== */
+
+/* LED indicator */
+.led {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--color-phos);
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.05),
+    0 0 8px var(--color-phos-glow),
+    0 0 16px var(--color-phos-glow);
+  animation: led-pulse 2s ease-in-out infinite;
+}
+
+.led.amber {
+  background: var(--color-amber);
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.05),
+    0 0 8px rgba(245, 177, 67, 0.4),
+    0 0 16px rgba(245, 177, 67, 0.3);
+  animation: led-pulse-fast 0.6s ease-in-out infinite;
+}
+
+.led.red {
+  background: var(--color-red);
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.05),
+    0 0 8px rgba(239, 111, 94, 0.4),
+    0 0 16px rgba(239, 111, 94, 0.3);
+}
+
+@keyframes led-pulse {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.55; }
+}
+
+@keyframes led-pulse-fast {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.4; }
+}
+
+/* tick row — used under sliders */
+.ticks {
+  display: flex;
+  justify-content: space-between;
+  font-size: 9px;
+  color: var(--color-fg-4);
+  letter-spacing: 0.05em;
+  font-variant-numeric: tabular-nums;
+}
+
+/* slider — instrument-fader look */
+input[type="range"].fader {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 22px;
+  background: transparent;
+  cursor: ew-resize;
+  outline: none;
+}
+
+input[type="range"].fader::-webkit-slider-runnable-track {
+  height: 2px;
+  background:
+    linear-gradient(to right,
+      var(--color-phos-dim) 0%,
+      var(--color-phos-dim) var(--pct, 50%),
+      var(--color-border-2) var(--pct, 50%),
+      var(--color-border-2) 100%);
+}
+
+input[type="range"].fader::-moz-range-track {
+  height: 2px;
+  background: var(--color-border-2);
+}
+
+input[type="range"].fader::-moz-range-progress {
+  height: 2px;
+  background: var(--color-phos-dim);
+}
+
+input[type="range"].fader::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  margin-top: -10px;
+  width: 4px;
+  height: 22px;
+  background: var(--color-phos);
+  border: 0;
+  border-radius: 0;
+  box-shadow: 0 0 10px var(--color-phos-glow);
+  transition: transform 80ms;
+}
+
+input[type="range"].fader::-moz-range-thumb {
+  width: 4px;
+  height: 22px;
+  background: var(--color-phos);
+  border: 0;
+  border-radius: 0;
+  box-shadow: 0 0 10px var(--color-phos-glow);
+}
+
+input[type="range"].fader:hover::-webkit-slider-thumb { transform: scaleY(1.12); }
+
+/* mini-fader — used inside the compact param-row cells */
+input[type="range"].mini-fader { height: 14px; }
+input[type="range"].mini-fader::-webkit-slider-thumb {
+  margin-top: -6px; width: 3px; height: 14px;
+}
+input[type="range"].mini-fader::-moz-range-thumb { width: 3px; height: 14px; }
+
+/* compact param-row select (different proportions to console-select) */
+select.param-select {
+  background-color: var(--color-surface);
+  color: var(--color-fg);
+  border: 1px solid var(--color-border-2);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  padding: 0.35rem 1.6rem 0.35rem 0.5rem;
+  -webkit-appearance: none;
+  appearance: none;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12' fill='none' stroke='%236a736f' stroke-width='1.2'><path d='M3 5l3 3 3-3'/></svg>");
+  background-repeat: no-repeat;
+  background-position: right 0.5rem center;
+  background-size: 10px;
+  outline: none;
+  cursor: pointer;
+  width: 100%;
+  margin-top: 0.1rem;
+  transition: border-color 80ms;
+}
+select.param-select:hover { border-color: var(--color-border-strong); }
+select.param-select:focus { border-color: var(--color-phos); }
+
+.param-resolved {
+  font-size: 9px;
+  color: var(--color-phos);
+  letter-spacing: 0.05em;
+  margin-top: 0.15rem;
+  font-variant-numeric: tabular-nums;
+}
+
+/* select dropdown */
+select.console-select {
+  background-color: var(--color-surface);
+  color: var(--color-fg);
+  border: 1px solid var(--color-border);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  padding: 0.55rem 2rem 0.55rem 0.7rem;
+  -webkit-appearance: none;
+  appearance: none;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12' fill='none' stroke='%236a736f' stroke-width='1.2'><path d='M3 5l3 3 3-3'/></svg>");
+  background-repeat: no-repeat;
+  background-position: right 0.6rem center;
+  background-size: 12px;
+  letter-spacing: 0.03em;
+  outline: none;
+  cursor: pointer;
+  width: 100%;
+  text-transform: none;
+  transition: border-color 80ms, background-color 80ms;
+}
+select.console-select:hover { border-color: var(--color-border-strong); }
+select.console-select:focus { border-color: var(--color-phos); }
+
+/* primary button — large instrument key */
+.btn-primary {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.6rem;
+  padding: 0.85rem 1.4rem;
+  background: var(--color-phos);
+  color: #0a0c0b;
+  font-weight: 700;
+  font-size: 12px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  border: 1px solid var(--color-phos);
+  cursor: pointer;
+  transition: all 80ms;
+  box-shadow:
+    0 0 0 1px rgba(110, 224, 102, 0.0),
+    0 8px 32px -8px var(--color-phos-glow);
+  overflow: hidden;
+}
+
+.btn-primary:hover:not(:disabled) {
+  box-shadow:
+    0 0 0 1px rgba(110, 224, 102, 0.3),
+    0 8px 32px -8px var(--color-phos-glow),
+    0 0 24px var(--color-phos-glow);
+  transform: translateY(-1px);
+}
+
+.btn-primary:active:not(:disabled) {
+  transform: translateY(0);
+  box-shadow: 0 4px 16px -8px var(--color-phos-glow);
+}
+
+.btn-primary:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.btn-primary.busy {
+  background: var(--color-surface-3);
+  color: var(--color-phos);
+  border-color: var(--color-border-2);
+  box-shadow: inset 0 0 0 1px var(--color-border-2);
+}
+
+/* secondary button */
+.btn-ghost {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.42rem 0.7rem;
+  background: transparent;
+  color: var(--color-fg-2);
+  border: 1px solid var(--color-border);
+  cursor: pointer;
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  transition: all 80ms;
+  font-family: var(--font-mono);
+}
+
+.btn-ghost:hover {
+  color: var(--color-fg);
+  border-color: var(--color-border-strong);
+  background: var(--color-surface);
+}
+
+/* text area */
+.console-textarea {
+  width: 100%;
+  background: var(--color-base);
+  color: var(--color-fg);
+  border: 1px solid var(--color-border);
+  padding: 1.1rem 1.2rem;
+  font-family: var(--font-mono);
+  font-size: 13.5px;
+  line-height: 1.7;
+  resize: none;
+  outline: none;
+  transition: border-color 120ms;
+  min-height: 160px;
+  letter-spacing: 0.005em;
+}
+
+.console-textarea:focus {
+  border-color: var(--color-border-strong);
+  box-shadow: inset 0 0 0 1px var(--color-border-2);
+}
+
+.console-textarea::placeholder { color: var(--color-fg-4); }
+
+/* tab bar (for code snippet) */
+.tab {
+  padding: 0.5rem 0.9rem;
+  font-size: 10.5px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--color-fg-3);
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid transparent;
+  cursor: pointer;
+  font-family: var(--font-mono);
+  transition: all 80ms;
+  white-space: nowrap;
+}
+
+.tab:hover { color: var(--color-fg); }
+
+.tab.active {
+  color: var(--color-phos);
+  border-bottom-color: var(--color-phos);
+}
+
+/* code block */
+.code-block {
+  background: var(--color-base);
+  border: 1px solid var(--color-border);
+  padding: 1.1rem 1.2rem;
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  line-height: 1.7;
+  white-space: pre;
+  color: var(--color-fg-2);
+  overflow-x: auto;
+  tab-size: 2;
+}
+
+.code-block .kw  { color: var(--color-phos); }
+.code-block .str { color: #d4a96a; }
+.code-block .num { color: #88c5ff; }
+.code-block .cmt { color: var(--color-fg-4); font-style: italic; }
+.code-block .fn  { color: #b7b1ff; }
+
+/* card panel */
+.panel {
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+}
+
+.panel-h {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.65rem 0.85rem;
+  border-bottom: 1px solid var(--color-border);
+  background: var(--color-surface-2);
+}
+
+/* fade-in */
+@keyframes rise {
+  0%   { opacity: 0; transform: translateY(6px); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+.rise   { animation: rise 360ms cubic-bezier(.2,.7,.3,1) both; }
+.rise.d1 { animation-delay: 60ms; }
+.rise.d2 { animation-delay: 120ms; }
+.rise.d3 { animation-delay: 180ms; }
+.rise.d4 { animation-delay: 240ms; }
+
+/* synthesizing pulse — for waveform area while we wait */
+@keyframes pulse-bar {
+  0%, 100% { opacity: 0.25; transform: scaleY(0.3); }
+  50%      { opacity: 1;    transform: scaleY(1);   }
+}
+
+/* scrollbar */
+* { scrollbar-color: var(--color-border-2) transparent; scrollbar-width: thin; }
+*::-webkit-scrollbar      { width: 8px; height: 8px; }
+*::-webkit-scrollbar-thumb { background: var(--color-border-2); }
+*::-webkit-scrollbar-thumb:hover { background: var(--color-border-strong); }
+
+/* selection */
+::selection {
+  background: var(--color-phos-bg);
+  color: var(--color-phos);
+}

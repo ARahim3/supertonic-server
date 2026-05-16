@@ -52,6 +52,8 @@ def _make_settings(**overrides) -> Settings:
 @click.option("--no-warmup", "warmup_flag", flag_value=False, default=None,
               help="Skip startup warmup (first request will be slow).")
 @click.option("--warmup-text", default=None, help="Text used for the startup warmup synthesis.")
+@click.option("--no-ui", "serve_ui_flag", flag_value=False, default=None,
+              help="Disable the built-in web UI at /.")
 @click.option("--log-level", default=None, help="uvicorn/python log level (debug, info, warning, error).")
 @click.option("--reload", is_flag=True, default=False, help="Auto-reload (dev only).")
 @click.version_option()
@@ -70,6 +72,7 @@ def main(
     max_concurrent_synth: Optional[int],
     warmup_flag: Optional[bool],
     warmup_text: Optional[str],
+    serve_ui_flag: Optional[bool],
     log_level: Optional[str],
     reload: bool,
 ) -> None:
@@ -90,6 +93,7 @@ def main(
         max_concurrent_synth=max_concurrent_synth,
         warmup=warmup_flag,
         warmup_text=warmup_text,
+        serve_ui=serve_ui_flag,
         log_level=log_level,
     )
     settings = _make_settings(**overrides)
@@ -110,6 +114,7 @@ def main(
     os.environ["SUPERTONIC_DEFAULT_SPEED"] = str(settings.default_speed)
     os.environ["SUPERTONIC_DEFAULT_TOTAL_STEPS"] = str(settings.default_total_steps)
     os.environ["SUPERTONIC_WARMUP"] = "1" if settings.warmup else "0"
+    os.environ["SUPERTONIC_SERVE_UI"] = "1" if settings.serve_ui else "0"
     if settings.warmup_text:
         os.environ["SUPERTONIC_WARMUP_TEXT"] = settings.warmup_text
     if settings.intra_op_threads is not None:

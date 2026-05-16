@@ -1,6 +1,6 @@
 [project]
 name = "supertonic-server"
-version = "0.1.0"
+version = "0.2.0"
 description = "OpenAI-compatible HTTP server for Supertonic-3 TTS with streaming, voice aliases, and CPU / CoreML / CUDA acceleration."
 readme = "README.md"
 requires-python = ">=3.11"
@@ -76,6 +76,23 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/supertonic_server"]
+# Strip UI source files from the wheel — only the built dist/ is needed at runtime.
+exclude = [
+    "src/supertonic_server/ui/src",
+    "src/supertonic_server/ui/public",
+    "src/supertonic_server/ui/node_modules",
+    "src/supertonic_server/ui/package.json",
+    "src/supertonic_server/ui/package-lock.json",
+    "src/supertonic_server/ui/tsconfig*.json",
+    "src/supertonic_server/ui/*.tsbuildinfo",
+    "src/supertonic_server/ui/vite.config.*",
+    "src/supertonic_server/ui/index.html",
+    "src/supertonic_server/ui/README.md",
+    "src/supertonic_server/ui/.gitignore",
+]
+# Force-include the built UI assets so users get the UI in `pip install`.
+[tool.hatch.build.targets.wheel.force-include]
+"src/supertonic_server/ui/dist" = "supertonic_server/ui/dist"
 
 [tool.hatch.build.targets.sdist]
 include = [
@@ -85,3 +102,12 @@ include = [
     "pyproject.toml",
     "examples",
 ]
+exclude = [
+    "src/supertonic_server/ui/node_modules",
+    "src/supertonic_server/ui/.vite",
+]
+
+# Force-include the built UI in the sdist so the wheel build (which reads from the sdist)
+# can find it. Without this, hatch's default gitignore-aware filter may skip dist/.
+[tool.hatch.build.targets.sdist.force-include]
+"src/supertonic_server/ui/dist" = "src/supertonic_server/ui/dist"

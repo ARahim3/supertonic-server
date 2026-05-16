@@ -42,6 +42,8 @@ class Settings(BaseSettings):
 
     cors_allow_origins: list[str] = ["*"]
 
+    serve_ui: bool = True
+
 
 def resolve_providers(device: Device) -> list[str]:
     """Pick ONNX execution providers based on requested device, respecting availability."""

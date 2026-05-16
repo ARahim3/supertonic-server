@@ -3,6 +3,7 @@ __pycache__/
 *.py[oc]
 build/
 dist/
+docs/screenshots/README.md
 wheels/
 *.egg-info
 
@@ -27,6 +28,6 @@ CLAUDE.md
 
 # Build artifacts
 dist/
-
+terminal.jsx
 # Local drafts
 draft/

@@ -1,18 +1,24 @@
 # supertonic-server
 
+> **OpenAI-compatible text-to-speech that runs entirely on your machine.**
+> Powered by [Supertonic-3](https://huggingface.co/Supertone/supertonic-3). Streams sentence-by-sentence. Talks to the OpenAI Python SDK, [Pipecat](https://github.com/pipecat-ai/pipecat), LiveKit Agents, OpenWebUI, or anything else that speaks the OpenAI TTS protocol — point it at `http://localhost:8000/v1` and go. Or open `http://localhost:8000/` in your browser and use the built-in console.
+
 [![PyPI](https://img.shields.io/pypi/v/supertonic-server.svg)](https://pypi.org/project/supertonic-server/)
 [![Python](https://img.shields.io/pypi/pyversions/supertonic-server.svg)](https://pypi.org/project/supertonic-server/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 [![Model: OpenRAIL-M](https://img.shields.io/badge/model-OpenRAIL--M-purple.svg)](https://huggingface.co/Supertone/supertonic-3)
 
-OpenAI-compatible HTTP server for the [Supertonic-3](https://huggingface.co/Supertone/supertonic-3) on-device TTS model — with streaming, voice aliases, multilingual support, and CPU/CoreML/CUDA acceleration.
+![supertonic-server console](docs/screenshots/console.png)
 
-Drop-in replacement for OpenAI's `/v1/audio/speech` endpoint. Works with the OpenAI Python SDK, [Pipecat](https://github.com/pipecat-ai/pipecat), LiveKit Agents, OpenWebUI, or anything else that speaks the OpenAI TTS protocol — just point it at `http://localhost:8000/v1`.
+|  |  |  |
+|---|---|---|
+| **⌂&nbsp; 100% local** | **⌫&nbsp; Drop-in for OpenAI** | **≋&nbsp; ~6–10× real-time** |
+| No cloud, no API keys, no telemetry. Runs on CPU, Apple Silicon (CoreML), or NVIDIA (CUDA). | One `base_url` change and your existing OpenAI SDK / Pipecat / LiveKit code keeps working. | ~450 ms first-byte on an M4 Pro. Streams audio before synthesis finishes — perfect for voice agents. |
 
 ## Contents
 
 - [Why](#why) · [vs other open-source TTS servers](#vs-other-open-source-tts-servers)
-- [Install](#install) · [Quick start](#quick-start-apple-silicon--linux--windows) · [Docker](#docker) · [CLI](#cli)
+- [Install](#install) · [Quick start](#quick-start-apple-silicon--linux--windows) · [Web console](#web-console) · [Docker](#docker) · [CLI](#cli)
 - [Endpoints](#endpoints) · [Voices](#voices) · [Languages](#languages)
 - [Use from: Python SDK](#use-it-from-python-openai-sdk) · [Pipecat](#use-it-from-pipecat) · [LiveKit](#use-it-from-livekit-agents)
 - [Performance](#performance--what-to-expect) · [Tuning](#tuning) · [Troubleshooting](#troubleshooting)
@@ -29,6 +35,7 @@ Drop-in replacement for OpenAI's `/v1/audio/speech` endpoint. Works with the Ope
 | Voices | 10 presets (F1–F5, M1–M5) + OpenAI aliases (`alloy`, `nova`, `echo`, …) |
 | First-byte latency | ~450–650 ms after warmup (default settings) |
 | Privacy | Fully local — no cloud calls |
+| Web UI | Built-in console at `/`, with live code-snippet panel for curl / OpenAI / Pipecat / LiveKit |
 | License | MIT code, OpenRAIL-M weights |
 
 ## vs other open-source TTS servers
@@ -77,7 +84,10 @@ uv pip install -e ".[dev]"
 # 1. Run the server (first run downloads the model — ~250 MB, one-time)
 supertonic-server --port 8000
 
-# 2. Speak
+# 2a. Open the web console
+open http://localhost:8000/                   # macOS — or just visit it in your browser
+
+# 2b. …or call it directly
 curl -X POST http://localhost:8000/v1/audio/speech \
   -H "Content-Type: application/json" \
   -d '{"input":"Hello, world.","voice":"alloy","response_format":"mp3"}' \
@@ -86,6 +96,26 @@ curl -X POST http://localhost:8000/v1/audio/speech \
 
 `--device auto` is the default and picks the best available execution provider:
 **CUDA** (if `onnxruntime-gpu` is installed and a GPU is present) → **CoreML** (macOS) → **CPU**.
+
+## Web console
+
+Open `http://localhost:8000/` in your browser. Built-in single-page console for testing voices, tuning parameters, and **copying the exact `curl` / OpenAI / Pipecat / LiveKit snippet for your code** — the snippet panel reflects whatever you've configured in the UI, so it doubles as a learning tool.
+
+<!-- Optional second screenshot of just the code-snippet panel, e.g. docs/screenshots/console-snippet.png -->
+
+What's in it:
+
+- 13 OpenAI voice aliases (`alloy`, `nova`, `echo`, …) **+** 10 native Supertonic voices (F1-F5, M1-M5), grouped in the picker
+- All 31 languages with human names (`English (en)`, `Korean (ko)`, …)
+- Speed slider (0.5×–2.0×) and diffusion-step slider (4–16)
+- `mp3 · wav · pcm` output format selector
+- Streams via HTTP/1.1 chunked transfer; live **TTFB** and bytes-received counter while waiting
+- HTML5 audio player with seek + canvas waveform + download button
+- Live code-snippet panel — 6 tabs: **curl · Python (OpenAI) · Python (httpx) · Pipecat · LiveKit · JavaScript**
+- Dark theme primary, light mode toggle (persists in `localStorage`)
+- 100% local — no external CDN calls, fonts bundled
+
+Run with `--no-ui` to disable the console route entirely (the API endpoints are unaffected).
 
 ## Docker
 
@@ -120,6 +150,7 @@ supertonic-server --help
   --max-concurrent INTEGER        Concurrent synthesis ops.
   --no-warmup                     Skip startup warmup.
   --warmup-text TEXT              Custom warmup utterance.
+  --no-ui                         Disable the built-in web console at /.
   --log-level TEXT                debug | info | warning | error.
   --reload                        Auto-reload (dev only).
 ```
