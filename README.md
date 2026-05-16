@@ -12,7 +12,7 @@ Drop-in replacement for OpenAI's `/v1/audio/speech` endpoint. Works with the Ope
 ## Contents
 
 - [Why](#why) · [vs other open-source TTS servers](#vs-other-open-source-tts-servers)
-- [Quick start](#quick-start-local-apple-silicon--linux--windows) · [Docker](#docker) · [CLI](#cli)
+- [Install](#install) · [Quick start](#quick-start-apple-silicon--linux--windows) · [Docker](#docker) · [CLI](#cli)
 - [Endpoints](#endpoints) · [Voices](#voices) · [Languages](#languages)
 - [Use from: Python SDK](#use-it-from-python-openai-sdk) · [Pipecat](#use-it-from-pipecat) · [LiveKit](#use-it-from-livekit-agents)
 - [Performance](#performance--what-to-expect) · [Tuning](#tuning) · [Troubleshooting](#troubleshooting)
@@ -44,17 +44,40 @@ Drop-in replacement for OpenAI's `/v1/audio/speech` endpoint. Works with the Ope
 
 "Streaming = sentence" means audio is emitted to the client as each sentence finishes synthesizing — what Pipecat and LiveKit consume natively.
 
-## Quick start (local, Apple Silicon / Linux / Windows)
+## Install
 
 ```bash
-# 1. Create venv and install
-uv venv --python 3.12
-uv pip install -e .
+# pip
+pip install supertonic-server
 
-# 2. Run the server (first run downloads the model — ~one-time hit)
+# uv (recommended — fast, isolated)
+uv venv --python 3.12
+uv pip install supertonic-server
+```
+
+Optional extras:
+
+```bash
+pip install "supertonic-server[pipecat]"   # adds pipecat-ai for the Pipecat example
+pip install "supertonic-server[dev]"       # adds pytest, httpx, openai for development
+```
+
+### From source
+
+```bash
+git clone https://github.com/ARahim3/supertonic-server.git
+cd supertonic-server
+uv venv --python 3.12
+uv pip install -e ".[dev]"
+```
+
+## Quick start (Apple Silicon / Linux / Windows)
+
+```bash
+# 1. Run the server (first run downloads the model — ~250 MB, one-time)
 supertonic-server --port 8000
 
-# 3. Speak
+# 2. Speak
 curl -X POST http://localhost:8000/v1/audio/speech \
   -H "Content-Type: application/json" \
   -d '{"input":"Hello, world.","voice":"alloy","response_format":"mp3"}' \
