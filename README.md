@@ -15,7 +15,7 @@
 
 ## Contents
 
-- [Performance](#performance--what-to-expect) · [vs other open-source TTS servers](#vs-other-open-source-tts-servers)
+- [Performance](#performance--what-to-expect) · [How it compares](#how-it-compares)
 - [Install](#install) · [Quick start](#quick-start-apple-silicon--linux--windows) · [Web console](#web-console) · [Docker](#docker) · [CLI](#cli)
 - [Endpoints](#endpoints) · [WebSocket TTS](#websocket-tts) · [Observability](#observability) · [Voices](#voices) · [Languages](#languages)
 - [Use from: Python SDK](#use-it-from-python-openai-sdk) · [Pipecat](#use-it-from-pipecat) · [LiveKit](#use-it-from-livekit-agents)
@@ -35,20 +35,18 @@ Each row below is **measured**: same 8 mixed-length English utterances sent back
 - **RTF** = synth wall-time ÷ audio duration (lower is better; `0.1` means 10× faster than real-time).
 - The 5090 row's tight p50→p95 spread (only 4 ms) is from CUDA's predictable kernel times; the M4 Pro's CoreML EP shows a wider spread because CoreML partitions the graph and falls back some ops to CPU.
 
-**Warmup.** The server runs one utterance at startup so the first user request doesn't pay graph-compile costs. Typical warmup is **1–3 s** on CoreML (Mac) and **2–3 s** on Ampere/Ada/Hopper NVIDIA cards. The RTX 5090 (Blackwell, sm_120) has a one-time **~60 s first-ever boot** while `onnxruntime-gpu` JIT-builds and caches its kernels under `~/.nv/ComputeCache/`; every boot after that warms in ~2.5 s.
+## How it compares
 
-**Tuning lever.** Drop `total_steps` from 8 to 4 for ~50 % faster synthesis with slightly less expressive output. Useful for CPU deployments or for the absolute shortest TTFB.
-
-## vs other open-source TTS servers
+Other open-source TTS servers and the two cloud APIs voice-agent builders most often default to:
 
 |  | Local | HTTP stream | WebSocket | Metrics | Languages | Quality | Cost |
 |---|:---:|:---:|:---:|:---:|:---:|---|---|
 | **supertonic-server** (this) | ✅ | sentence | ✅ | `/metrics` + UI | 31 | high | free |
-| [Kokoro-FastAPI](https://github.com/remsky/Kokoro-FastAPI) | ✅ | sentence | ❌ | ❌ | ~8 | high | free |
-| [openedai-speech](https://github.com/matatonic/openedai-speech) (Piper) | ✅ | sentence | ❌ | ❌ | ~30 voices | mid | free |
+| [Kokoro-FastAPI](https://github.com/remsky/Kokoro-FastAPI) | ✅ | sentence | ❌ | ❌ | ~9 | high | free |
+| [openedai-speech](https://github.com/matatonic/openedai-speech) (Piper) | ✅ | sentence | ❌ | ❌ | ~30 | mid | free |
 | [openedai-speech](https://github.com/matatonic/openedai-speech) (XTTS) | ✅ | sentence | ❌ | ❌ | 17 | high | free |
 | ElevenLabs API | ❌ | yes | ✅ | n/a (cloud) | 29+ | top | paid |
-| OpenAI TTS API | ❌ | yes | Realtime API | n/a (cloud) | 100+ | high | paid |
+| OpenAI TTS API | ❌ | yes | Realtime API | n/a (cloud) | 57+ | high | paid |
 
 "HTTP stream = sentence" means audio is emitted to the client as each sentence finishes synthesizing — what Pipecat and LiveKit consume natively. The **WebSocket** transport adds a persistent connection with text-delta input and `cancel`-based interruption — useful for LLM → TTS pipelines in voice agents. Speed numbers are above in the [Performance](#performance--what-to-expect) section.
 
@@ -386,7 +384,9 @@ tts = openai.TTS(
 
 ## Troubleshooting
 
-**First request is very slow (multi-second).** Either you started with `--no-warmup`, or you're using `--reload` and a save triggered a reload. Restart without `--no-warmup`; the warmup synthesis pre-compiles the CoreML/CUDA graphs so the first real request lands warm.
+**First request is very slow (multi-second).** Either you started with `--no-warmup`, or you're using `--reload` and a save triggered a reload. Restart without `--no-warmup`; the warmup synthesis pre-compiles the CoreML/CUDA graphs so the first real request lands warm. Typical warmup is 1–3 s on CoreML and 2–3 s on Ampere/Ada/Hopper NVIDIA cards.
+
+**Server warmup itself is taking ~60 s on first-ever boot.** This is the Blackwell-specific (sm_120, e.g. RTX 5090) one-time cost: `onnxruntime-gpu` JIT-builds CUDA kernels for the new compute capability and caches them at `~/.nv/ComputeCache/`. Every boot after that warms in ~2.5 s. Older NVIDIA cards (Ampere/Ada/Hopper) ship pre-built kernels and don't pay this.
 
 **Model download is slow or hangs on first run.** The Supertonic-3 weights (~250 MB across 26 files) are pulled from Hugging Face into `~/.cache/supertonic3/`. Check your network, or pre-download:
 ```bash
