@@ -132,28 +132,41 @@ const escapeHtml = (s: string) =>
 
 // Word-char-only placeholders. The digits sit between `\w` chars on both
 // sides, so the number regex (`\b\d+\b`) can't match them mid-restoration.
-const PH_RE = /__SSTOK(\d+)KOTSS__/g;
-const ph = (i: number) => `__SSTOK${i}KOTSS__`;
+// Two distinct placeholder shapes so strings and comments don't collide.
+const PH_STR_RE = /__SSTOK(\d+)KOTSS__/g;
+const phStr = (i: number) => `__SSTOK${i}KOTSS__`;
+const PH_CMT_RE = /__CCTOK(\d+)KOTCC__/g;
+const phCmt = (i: number) => `__CCTOK${i}KOTCC__`;
 
 export function highlight(code: string, lang: 'bash' | 'python' | 'js'): string {
   let out = escapeHtml(code);
 
-  // 1) hide strings behind word-char placeholders
+  // 1) hide strings behind placeholders. Their contents must not be tokenized.
   const stringTokens: string[] = [];
   out = out.replace(STR_ANY, (m) => {
     stringTokens.push(`<span class="str">${m}</span>`);
-    return ph(stringTokens.length - 1);
+    return phStr(stringTokens.length - 1);
   });
 
-  // 2) comments
+  // 2) hide comments behind placeholders TOO — otherwise the keyword pass below
+  //    matches words like `class` (a Python keyword) inside our injected
+  //    `<span class="cmt">` attribute name and emits malformed HTML
+  //    (`<span <span class="kw">class</span>="cmt">`) that browsers render as
+  //    literal text. The fix is to keep the keyword/number passes from ever
+  //    seeing our own injected attributes.
+  const commentTokens: string[] = [];
+  const stashCmt = (m: string) => {
+    commentTokens.push(`<span class="cmt">${m}</span>`);
+    return phCmt(commentTokens.length - 1);
+  };
   if (lang === 'bash' || lang === 'python') {
-    out = out.replace(COMMENT_PY_BASH, '$1<span class="cmt">$2</span>');
+    out = out.replace(COMMENT_PY_BASH, (_full, pre: string, cmt: string) => pre + stashCmt(cmt));
   }
   if (lang === 'js') {
-    out = out.replace(COMMENT_JS, (m) => `<span class="cmt">${m}</span>`);
+    out = out.replace(COMMENT_JS, (m) => stashCmt(m));
   }
 
-  // 3) keywords
+  // 3) keywords — now operates on code with no exposed injected attributes
   if (lang === 'bash')   out = out.replace(KW_BASH,   (m) => `<span class="kw">${m}</span>`);
   if (lang === 'python') out = out.replace(KW_PYTHON, (m) => `<span class="kw">${m}</span>`);
   if (lang === 'js')     out = out.replace(KW_JS,     (m) => `<span class="kw">${m}</span>`);
@@ -161,8 +174,10 @@ export function highlight(code: string, lang: 'bash' | 'python' | 'js'): string 
   // 4) numbers — placeholder format keeps token digits safe from this pass
   out = out.replace(NUM, (m) => `<span class="num">${m}</span>`);
 
-  // 5) restore strings
-  out = out.replace(PH_RE, (_, i) => stringTokens[parseInt(i, 10)]);
+  // 5) restore comments FIRST (the injected span may itself contain a string
+  //    placeholder, e.g. `# the URL "http://..." is special`), then strings.
+  out = out.replace(PH_CMT_RE, (_, i) => commentTokens[parseInt(i, 10)]);
+  out = out.replace(PH_STR_RE, (_, i) => stringTokens[parseInt(i, 10)]);
 
   return out;
 }

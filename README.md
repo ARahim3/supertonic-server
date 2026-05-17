@@ -8,8 +8,6 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 [![Model: OpenRAIL-M](https://img.shields.io/badge/model-OpenRAIL--M-purple.svg)](https://huggingface.co/Supertone/supertonic-3)
 
-![supertonic-server console](docs/screenshots/console.png)
-
 |  |  |  |
 |---|---|---|
 | **⌂&nbsp; 100% local** | **⌫&nbsp; Drop-in for OpenAI** | **≋&nbsp; ~6–10× real-time** |
@@ -17,14 +15,14 @@
 
 ## Contents
 
-- [Why](#why) · [vs other open-source TTS servers](#vs-other-open-source-tts-servers)
+- [At a glance](#at-a-glance) · [vs other open-source TTS servers](#vs-other-open-source-tts-servers)
 - [Install](#install) · [Quick start](#quick-start-apple-silicon--linux--windows) · [Web console](#web-console) · [Docker](#docker) · [CLI](#cli)
-- [Endpoints](#endpoints) · [Voices](#voices) · [Languages](#languages)
+- [Endpoints](#endpoints) · [WebSocket TTS](#websocket-tts) · [Observability](#observability) · [Voices](#voices) · [Languages](#languages)
 - [Use from: Python SDK](#use-it-from-python-openai-sdk) · [Pipecat](#use-it-from-pipecat) · [LiveKit](#use-it-from-livekit-agents)
 - [Performance](#performance--what-to-expect) · [Tuning](#tuning) · [Troubleshooting](#troubleshooting)
 - [Limitations](#limitations) · [License](#license)
 
-## Why
+## At a glance
 
 | | Supertonic-3 (via this server) |
 |---|---|
@@ -35,21 +33,23 @@
 | Voices | 10 presets (F1–F5, M1–M5) + OpenAI aliases (`alloy`, `nova`, `echo`, …) |
 | First-byte latency | ~450–650 ms after warmup (default settings) |
 | Privacy | Fully local — no cloud calls |
+| Transports | OpenAI-compatible HTTP **and** a WebSocket endpoint for voice-agent streaming |
+| Observability | In-process ring buffer + Prometheus `/metrics`; live Observatory tab in the web console |
 | Web UI | Built-in console at `/`, with live code-snippet panel for curl / OpenAI / Pipecat / LiveKit |
 | License | MIT code, OpenRAIL-M weights |
 
 ## vs other open-source TTS servers
 
-|  | Local | Streaming | CPU speed | Languages | Quality | Cost |
-|---|:---:|:---:|---|:---:|---|---|
-| **supertonic-server** (this) | ✅ | sentence | RTF 0.1–0.2 (M-series) | 31 | high | free |
-| [Kokoro-FastAPI](https://github.com/remsky/Kokoro-FastAPI) | ✅ | sentence | RTF 0.3–0.5 | ~8 | high | free |
-| [openedai-speech](https://github.com/matatonic/openedai-speech) (Piper) | ✅ | sentence | RTF 0.05–0.1 | ~30 voices | mid | free |
-| [openedai-speech](https://github.com/matatonic/openedai-speech) (XTTS) | ✅ | sentence | RTF 1.0–2.0 | 17 | high | free |
-| ElevenLabs API | ❌ | yes | n/a (cloud) | 29+ | top | paid |
-| OpenAI TTS API | ❌ | yes | n/a (cloud) | 100+ | high | paid |
+|  | Local | HTTP stream | WebSocket | Metrics | CPU speed | Languages | Quality | Cost |
+|---|:---:|:---:|:---:|:---:|---|:---:|---|---|
+| **supertonic-server** (this) | ✅ | sentence | ✅ | `/metrics` + UI | RTF 0.1–0.2 (M-series) | 31 | high | free |
+| [Kokoro-FastAPI](https://github.com/remsky/Kokoro-FastAPI) | ✅ | sentence | ❌ | ❌ | RTF 0.3–0.5 | ~8 | high | free |
+| [openedai-speech](https://github.com/matatonic/openedai-speech) (Piper) | ✅ | sentence | ❌ | ❌ | RTF 0.05–0.1 | ~30 voices | mid | free |
+| [openedai-speech](https://github.com/matatonic/openedai-speech) (XTTS) | ✅ | sentence | ❌ | ❌ | RTF 1.0–2.0 | 17 | high | free |
+| ElevenLabs API | ❌ | yes | ✅ | n/a (cloud) | n/a (cloud) | 29+ | top | paid |
+| OpenAI TTS API | ❌ | yes | Realtime API | n/a (cloud) | n/a (cloud) | 100+ | high | paid |
 
-"Streaming = sentence" means audio is emitted to the client as each sentence finishes synthesizing — what Pipecat and LiveKit consume natively.
+"HTTP stream = sentence" means audio is emitted to the client as each sentence finishes synthesizing — what Pipecat and LiveKit consume natively. The **WebSocket** transport adds a persistent connection with text-delta input and `cancel`-based interruption — useful for LLM → TTS pipelines in voice agents.
 
 ## Install
 
@@ -99,11 +99,11 @@ curl -X POST http://localhost:8000/v1/audio/speech \
 
 ## Web console
 
-Open `http://localhost:8000/` in your browser. Built-in single-page console for testing voices, tuning parameters, and **copying the exact `curl` / OpenAI / Pipecat / LiveKit snippet for your code** — the snippet panel reflects whatever you've configured in the UI, so it doubles as a learning tool.
+Open `http://localhost:8000/` in your browser. Built-in single-page console with two views — **console** (testing voices, tuning parameters, copying ready-to-paste integration snippets) and **observatory** (live server-side metrics; see [Observability](#observability) below).
 
-<!-- Optional second screenshot of just the code-snippet panel, e.g. docs/screenshots/console-snippet.png -->
+![supertonic-server console](docs/screenshots/console.png)
 
-What's in it:
+In the **console** view:
 
 - 13 OpenAI voice aliases (`alloy`, `nova`, `echo`, …) **+** 10 native Supertonic voices (F1-F5, M1-M5), grouped in the picker
 - All 31 languages with human names (`English (en)`, `Korean (ko)`, …)
@@ -112,25 +112,66 @@ What's in it:
 - Streams via HTTP/1.1 chunked transfer; live **TTFB** and bytes-received counter while waiting
 - HTML5 audio player with seek + canvas waveform + download button
 - Live code-snippet panel — 6 tabs: **curl · Python (OpenAI) · Python (httpx) · Pipecat · LiveKit · JavaScript**
-- Dark theme primary, light mode toggle (persists in `localStorage`)
-- 100% local — no external CDN calls, fonts bundled
 
-Run with `--no-ui` to disable the console route entirely (the API endpoints are unaffected).
+In the **observatory** view:
+
+- Active synthesis count, total requests, requests-per-second (1m window), errors, audio + bytes served
+- **p50 / p95 / p99** TTFB and RTF over the recent buffer
+- Waterfall feed of recent requests (newest first) with per-row TTFB-vs-stream bar; click any row for full detail
+- 1 Hz polling against `/metrics/summary` and `/metrics/recent`; pause toggle to freeze the view
+
+Dark theme is primary; a light-mode toggle persists in `localStorage` along with the active view. Run with `--no-ui` to disable the console route entirely (the API endpoints are unaffected).
 
 ## Docker
 
+Two images are shipped — pick the one that matches your hardware. The mounted volume in each example caches the model weights so subsequent starts skip the ~250 MB download.
+
+### CPU image (`Dockerfile`)
+
+Works on every platform — Linux / macOS / Windows containers, x86_64 / arm64. Includes the CPU build of `onnxruntime` only; no CUDA libraries.
+
 ```bash
 docker build -t supertonic-server .
-
-# CPU (works on any platform incl. Linux, Windows containers, macOS)
 docker run --rm -p 8000:8000 -v supertonic-cache:/root/.cache supertonic-server
-
-# NVIDIA GPU (see Dockerfile for full instructions)
-docker run --rm --gpus all -p 8000:8000 -v supertonic-cache:/root/.cache \
-  -e SUPERTONIC_DEVICE=cuda supertonic-server
 ```
 
-The mounted volume caches the model weights so subsequent starts skip the download.
+The default device is `auto`, which on this image resolves to CPU (CoreML / CUDA execution providers aren't installed). If you pass `-e SUPERTONIC_DEVICE=cuda` here, the server will log a warning and fall back to CPU — use the CUDA image below for real GPU acceleration.
+
+### NVIDIA GPU image (`Dockerfile.cuda`)
+
+Linux-only. Bundles a CUDA 12.4 runtime, cuDNN 9, and `onnxruntime-gpu`. The build step self-checks that `CUDAExecutionProvider` is actually available inside the image, so a broken build fails fast instead of silently running on CPU at runtime.
+
+**Host prerequisites:**
+
+- NVIDIA driver ≥ 545 (any driver compatible with the CUDA 12.4 runtime)
+- `nvidia-container-toolkit` installed and registered with the Docker daemon — see [NVIDIA's install guide](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html)
+- Docker Desktop on macOS / Windows **cannot** pass through NVIDIA GPUs; this image is Linux-only
+
+**Sanity-check the host first** (must print your GPU details, not an error):
+
+```bash
+docker run --rm --gpus all nvidia/cuda:12.4.1-base-ubuntu22.04 nvidia-smi
+```
+
+**Then build and run:**
+
+```bash
+docker build -f Dockerfile.cuda -t supertonic-server:cuda .
+
+docker run --rm --gpus all -p 8000:8000 \
+  -v supertonic-cache:/root/.cache \
+  supertonic-server:cuda
+```
+
+The image sets `SUPERTONIC_DEVICE=cuda` in its environment, so no extra flags are needed.
+
+**Verify** that the GPU is actually being used — the startup log should include:
+
+```
+INFO supertonic_server.engine  ONNX providers: ['CUDAExecutionProvider', 'CPUExecutionProvider']
+```
+
+If you see `['CPUExecutionProvider']` only, the GPU isn't reachable from inside the container — re-check the `nvidia-smi` step above.
 
 ## CLI
 
@@ -194,7 +235,76 @@ OpenAI-style model list (returns `supertonic-3` plus `tts-1`, `tts-1-hd`,
 
 ### `GET /healthz`
 
-`{"status":"ok","model":"supertonic-3","sample_rate":44100,"voices":[…],"languages":[…]}`
+`{"status":"ok","model":"supertonic-3","sample_rate":44100,"voices":[…],"languages":[…],"ws_enabled":true}`
+
+### Other endpoints
+
+- `WS /v1/audio/speech/stream` — see [WebSocket TTS](#websocket-tts).
+- `GET /metrics`, `GET /metrics/summary`, `GET /metrics/recent` — see [Observability](#observability).
+
+## WebSocket TTS
+
+For voice agents pipelining LLM → TTS, the WebSocket endpoint skips per-utterance TCP/TLS setup, takes text deltas as the LLM emits them, and supports explicit cancellation for user interruptions. It's an extension — not part of the OpenAI surface — and the protocol shape mirrors ElevenLabs'.
+
+**Endpoint:** `WS /v1/audio/speech/stream`
+
+```
+client → server                                       server → client
+  { "type": "config",                                   { "type": "ready",        ... }
+    "voice": "alloy", "lang": "en",                     { "type": "config_ack",   "config": {...} }
+    "speed": 1.05, "total_steps": 8 }                   { "type": "audio_start",  "ttfb_ms": ... }
+  { "type": "text", "text": "Hello, " }                 { "type": "audio",        "chunk": "<base64 PCM>" }
+  { "type": "text", "text": "world." }                  { "type": "audio_end",    "stats": {...} }
+  { "type": "flush" }                                   { "type": "cancelled"     }
+  { "type": "cancel" }                                  { "type": "error",        "message": "..." }
+  { "type": "close" }
+```
+
+Audio chunks are base64-encoded little-endian int16 PCM at the server's sample rate (44.1 kHz mono). `flush` triggers synthesis of the buffered text; `cancel` interrupts the in-flight stream and drops the buffer. A complete Python client lives in [`examples/ws_smoke.py`](examples/ws_smoke.py).
+
+Disable the endpoint with `SUPERTONIC_WS_ENABLED=0`.
+
+## Observability
+
+Cloud TTS APIs can't show you what's happening server-side. We run locally — we can. Every synthesis (HTTP **or** WebSocket) is recorded in an in-process ring buffer (configurable, default 100), with live percentile aggregates and three endpoints to read them.
+
+### `GET /metrics` — Prometheus text exposition
+
+Scrape it from Prometheus / Grafana / Datadog Agent / anything that speaks the text format. No client lib required.
+
+```
+# HELP supertonic_requests_total Number of synthesis requests since process start, by terminal status
+# TYPE supertonic_requests_total counter
+supertonic_requests_total{status="ok"}        142
+supertonic_requests_total{status="error"}     0
+supertonic_requests_total{status="cancelled"} 1
+
+# HELP supertonic_ttfb_ms Time-to-first-byte (ms) over the recent window
+# TYPE supertonic_ttfb_ms summary
+supertonic_ttfb_ms{quantile="0.5"}  481.4
+supertonic_ttfb_ms{quantile="0.95"} 661.7
+supertonic_ttfb_ms{quantile="0.99"} 684.4
+
+# HELP supertonic_rtf Real-time factor over the recent window
+# TYPE supertonic_rtf summary
+supertonic_rtf{quantile="0.5"}  0.20
+supertonic_rtf{quantile="0.95"} 0.24
+supertonic_rtf{quantile="0.99"} 0.31
+```
+
+Plus `supertonic_active_synth`, `supertonic_bytes_total`, `supertonic_audio_seconds_total`, `supertonic_uptime_seconds`, `supertonic_rps_1m`, `supertonic_error_rate`.
+
+### `GET /metrics/summary` — JSON aggregates
+
+Same data as `/metrics`, JSON-shaped. Used by the Observatory tab in the web console; also handy for custom dashboards.
+
+### `GET /metrics/recent?limit=N` — JSON ring buffer
+
+Recent `RequestRecord`s, newest-first. Each record includes: text snippet (first ~80 chars), text length, voice, lang, format, status (`ok` / `cancelled` / `error`), `ttfb_ms`, `total_ms`, `bytes`, `audio_s`, `rtf`, error, and `transport` (`http` / `ws`).
+
+### Configuration
+
+`SUPERTONIC_OBSERVABILITY_BUFFER_SIZE` (default 100, range 10..10000) sets the ring-buffer depth. Cumulative totals (requests, bytes, audio seconds) survive ring-buffer eviction; percentiles slide with the buffer. No persistence — restart clears the in-memory state.
 
 ## Voices
 
@@ -266,17 +376,21 @@ tts = openai.TTS(
 
 ## Performance — what to expect
 
-Numbers from an Apple **M4 Pro** with `--device auto` (CoreML EP):
+Each row below is **measured**: same 8 mixed-length English utterances sent back-to-back to `POST /v1/audio/speech` (`voice=alloy`, `response_format=pcm`, default `total_steps=8`), aggregates read straight from `GET /metrics/summary`.
 
-| Workload | First-byte latency | RTF |
-|---|---|---|
-| Short single sentence (~3s audio) | ~450–650 ms | 0.10 – 0.25 |
-| Multi-sentence (~13 s audio, streaming) | ~620 ms | 0.18 |
-| Long form (~20 s audio) | ~600 ms | 0.15 |
+| Hardware | TTFB p50 | TTFB p95 | RTF p50 | RTF p95 | ≈ real-time |
+|---|---:|---:|---:|---:|---:|
+| Apple **M4 Pro** · CoreML | 515 ms | 807 ms | 0.166 | 0.255 | ~6× |
+| NVIDIA **RTX 5090** · CUDA | **115 ms** | **119 ms** | **0.034** | **0.070** | **~30×** |
+| Apple M4 Pro · CPU (Docker, `--total-steps 4`) | ~1.6 s | — | ~0.40 | — | ~2.5× |
 
-Warmup runs a short utterance on startup so the first real request doesn't pay
-the CoreML graph-compile tax (~2 s on cold start). Use `--no-warmup` to skip if
-you really want to.
+- **TTFB** = wall-clock from request to first audio byte (lower is better; sub-second feels live for voice agents).
+- **RTF** = synth wall-time ÷ audio duration (lower is better; `0.1` means 10× faster than real-time).
+- The 5090 row's tight p50→p95 spread (only 4 ms) is from CUDA's predictable kernel times; the M4 Pro's CoreML EP shows a wider spread because CoreML partitions the graph and falls back some ops to CPU.
+
+**Warmup.** The server runs one utterance at startup so the first user request doesn't pay graph-compile costs. Typical warmup is **1–3 s** on CoreML (Mac) and **2–3 s** on Ampere/Ada/Hopper NVIDIA cards. The RTX 5090 (Blackwell, sm_120) has a one-time **~60 s first-ever boot** while `onnxruntime-gpu` JIT-builds and caches its kernels under `~/.nv/ComputeCache/`; every boot after that warms in ~2.5 s.
+
+**Tuning lever.** Drop `total_steps` from 8 to 4 for ~50 % faster synthesis with slightly less expressive output. Useful for CPU deployments or for the absolute shortest TTFB.
 
 ## Tuning
 
@@ -306,11 +420,21 @@ huggingface-cli download Supertone/supertonic-3 --local-dir ~/.cache/supertonic3
 
 **Empty or truncated audio.** The client closed the connection mid-stream. The server cancels pending synthesis but lets any in-flight chunk finish (no way to interrupt a running ONNX call). Subsequent requests are unaffected.
 
+**Container is using CPU even with `--gpus all` / `-e SUPERTONIC_DEVICE=cuda`.** The default `Dockerfile` ships the CPU build of `onnxruntime`, so the GPU is unreachable regardless of what you set `SUPERTONIC_DEVICE` to. The startup log will print:
+
+```
+WARNING supertonic_server.config device=cuda requested but CUDAExecutionProvider is not available …
+```
+
+Build [`Dockerfile.cuda`](Dockerfile.cuda) instead — it bundles `onnxruntime-gpu` and a CUDA 12 runtime. Also check on the host that `docker run --rm --gpus all nvidia/cuda:12.4.1-base-ubuntu22.04 nvidia-smi` works; if that fails, the `nvidia-container-toolkit` setup is the actual problem.
+
 ## Limitations
 
-- Only `mp3`, `wav`, `pcm` response formats. (Opus/AAC/FLAC are TODO.)
+- Only `mp3`, `wav`, `pcm` response formats over HTTP. (Opus/AAC/FLAC are TODO.)
+- The WebSocket endpoint emits **PCM only** (base64-encoded int16). Add MP3/Opus over WS if a downstream user needs it — open an issue.
 - No voice cloning at runtime — use Supertone's separate Voice Builder for that.
 - Diffusion pipeline is per-chunk, so we stream at **sentence** granularity, not sub-sentence. This is the standard granularity Pipecat / LiveKit expect.
+- Observability is in-process: restart clears the metrics buffer. For long-term retention, scrape `/metrics` from Prometheus or similar.
 
 ## License
 

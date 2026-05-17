@@ -8,6 +8,7 @@ export type Health = {
   voices: string[];
   languages: string[];
   device_request: string;
+  ws_enabled?: boolean;
 };
 
 export type VoiceEntry = { id: string; supertonic_voice: string };
@@ -33,4 +34,54 @@ export type SynthesisStats = {
   audio_s: number;
   rtf: number;
   bytes: number;
+};
+
+/* ---- Observability ---- */
+
+export type Percentiles = {
+  p50: number;
+  p95: number;
+  p99: number;
+  count: number;
+};
+
+export type MetricsSummary = {
+  uptime_s: number;
+  active: number;
+  totals: {
+    requests: number;
+    ok: number;
+    error: number;
+    cancelled: number;
+    bytes: number;
+    audio_s: number;
+  };
+  window: {
+    buffer_capacity: number;
+    buffer_used: number;
+    rps_1m: number;
+    rps_5m: number;
+    error_rate: number;
+    ttfb_ms: Percentiles;
+    rtf: Percentiles;
+  };
+};
+
+export type RecentRecord = {
+  id: number;
+  started_at: number;
+  ended_at: number;
+  text_snippet: string;
+  text_length: number;
+  voice: string;
+  lang: string;
+  format: string;
+  status: 'ok' | 'cancelled' | 'error';
+  ttfb_ms: number;
+  total_ms: number;
+  bytes: number;
+  audio_s: number;
+  rtf: number;
+  error: string | null;
+  transport: 'http' | 'ws';
 };

@@ -44,11 +44,25 @@ class Settings(BaseSettings):
 
     serve_ui: bool = True
 
+    # Observability
+    observability_buffer_size: int = Field(default=100, ge=10, le=10_000)
+
+    # WebSocket TTS (extension, not part of OpenAI compat)
+    ws_enabled: bool = True
+
 
 def resolve_providers(device: Device) -> list[str]:
-    """Pick ONNX execution providers based on requested device, respecting availability."""
+    """Pick ONNX execution providers based on requested device, respecting availability.
+
+    Logs a loud warning if the user asked for a hardware accelerator that isn't
+    actually available — silent CPU fallback used to confuse Docker users who'd
+    passed `--device cuda` but were running an image without `onnxruntime-gpu`.
+    """
+    import logging
+
     import onnxruntime as ort
 
+    log = logging.getLogger("supertonic_server.config")
     available = ort.get_available_providers()
 
     if device == "cpu":
@@ -56,10 +70,23 @@ def resolve_providers(device: Device) -> list[str]:
     if device == "coreml":
         if "CoreMLExecutionProvider" in available:
             return ["CoreMLExecutionProvider", "CPUExecutionProvider"]
+        log.warning(
+            "device=coreml requested but CoreMLExecutionProvider is not available "
+            "(available: %s). Falling back to CPU. On non-macOS this is expected.",
+            available,
+        )
         return ["CPUExecutionProvider"]
     if device == "cuda":
         if "CUDAExecutionProvider" in available:
             return ["CUDAExecutionProvider", "CPUExecutionProvider"]
+        log.warning(
+            "device=cuda requested but CUDAExecutionProvider is not available "
+            "(available: %s). Falling back to CPU. If you're running in Docker, "
+            "make sure you built the CUDA image (Dockerfile.cuda) and started the "
+            "container with `--gpus all`; the default Dockerfile installs the CPU "
+            "build of onnxruntime only.",
+            available,
+        )
         return ["CPUExecutionProvider"]
 
     # auto: best available

@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Format, Health, SpeechParams, SynthesisStats, VoicesResp } from './types';
-import { decodeAudio, getHealth, getVoices, synthesize, toPlayableBlob } from './api';
+import { decodeAudio, getHealth, getMetricsSummary, getVoices, synthesize, toPlayableBlob } from './api';
 import { TopBar } from './components/TopBar';
 import { Editor } from './components/Editor';
 import { Player } from './components/Player';
 import { CodeSnippet } from './components/CodeSnippet';
+import { NavTabs, type ViewKey } from './components/NavTabs';
+import { Observatory } from './components/Observatory';
 
 const DEFAULT_TEXT =
   'Hello, world. Supertonic is now running locally on your machine.';
@@ -21,6 +23,37 @@ export default function App() {
     document.documentElement.classList.toggle('light', theme === 'light');
     localStorage.setItem('supertonic-theme', theme);
   }, [theme]);
+
+  /* ------------------- view (console / observatory) ------------------- */
+  const [view, setView] = useState<ViewKey>(() => {
+    const saved = localStorage.getItem('supertonic-view');
+    return saved === 'observatory' ? 'observatory' : 'console';
+  });
+  useEffect(() => {
+    localStorage.setItem('supertonic-view', view);
+  }, [view]);
+
+  /* ------------------- lightweight active-count poll for the nav badge -- */
+  const [activeCount, setActiveCount] = useState(0);
+  useEffect(() => {
+    let cancelled = false;
+    const ctrl = new AbortController();
+    const tick = async () => {
+      try {
+        const s = await getMetricsSummary(ctrl.signal);
+        if (!cancelled) setActiveCount(s.active);
+      } catch {
+        /* ignore — handled in Observatory view */
+      }
+    };
+    tick();
+    const id = window.setInterval(tick, 2000);
+    return () => {
+      cancelled = true;
+      ctrl.abort();
+      window.clearInterval(id);
+    };
+  }, []);
 
   /* ------------------- server state ------------------- */
   const [health, setHealth] = useState<Health | null>(null);
@@ -163,48 +196,55 @@ export default function App() {
         theme={theme}
         onToggleTheme={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
       />
+      <NavTabs view={view} onChange={setView} active={activeCount} />
 
       <main className="flex-1 mx-auto w-full max-w-[1320px] px-8 py-7 space-y-7">
-        {/* HERO: input → output, output gets slightly more room */}
-        <div className="grid grid-cols-12 gap-7">
-          <div className="col-span-12 lg:col-span-6">
-            <Editor
-              voices={voices}
-              languages={health?.languages ?? []}
-              text={text}
-              voice={voice}
-              lang={lang}
-              speed={speed}
-              steps={steps}
-              format={format}
-              onText={setText}
-              onVoice={setVoice}
-              onLang={setLang}
-              onSpeed={setSpeed}
-              onSteps={setSteps}
-              onFormat={setFormat}
-              busy={busy}
-              error={error}
-              onSynth={onSynth}
-              onCancel={onCancel}
-              liveTtfbMs={liveTtfb}
-              liveBytes={liveBytes}
-            />
-          </div>
+        {view === 'console' ? (
+          <>
+            {/* HERO: input → output, output gets slightly more room */}
+            <div className="grid grid-cols-12 gap-7">
+              <div className="col-span-12 lg:col-span-6">
+                <Editor
+                  voices={voices}
+                  languages={health?.languages ?? []}
+                  text={text}
+                  voice={voice}
+                  lang={lang}
+                  speed={speed}
+                  steps={steps}
+                  format={format}
+                  onText={setText}
+                  onVoice={setVoice}
+                  onLang={setLang}
+                  onSpeed={setSpeed}
+                  onSteps={setSteps}
+                  onFormat={setFormat}
+                  busy={busy}
+                  error={error}
+                  onSynth={onSynth}
+                  onCancel={onCancel}
+                  liveTtfbMs={liveTtfb}
+                  liveBytes={liveBytes}
+                />
+              </div>
 
-          <div className="col-span-12 lg:col-span-6">
-            <Player
-              blob={blob}
-              stats={stats}
-              peaks={peaks}
-              busy={busy}
-              filename={filename}
-            />
-          </div>
-        </div>
+              <div className="col-span-12 lg:col-span-6">
+                <Player
+                  blob={blob}
+                  stats={stats}
+                  peaks={peaks}
+                  busy={busy}
+                  filename={filename}
+                />
+              </div>
+            </div>
 
-        {/* CODE — recessed, opens on demand */}
-        <CodeSnippet params={params} />
+            {/* CODE — recessed, opens on demand */}
+            <CodeSnippet params={params} />
+          </>
+        ) : (
+          <Observatory />
+        )}
 
         <Footer />
       </main>

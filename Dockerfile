@@ -1,11 +1,13 @@
 # Cross-platform CPU image for supertonic-server.
-# Build:  docker build -t supertonic-server .
-# Run:    docker run --rm -p 8000:8000 -v supertonic-models:/root/.cache supertonic-server
 #
-# For NVIDIA GPU on Linux:
-#   1. Use `--device cuda` and base on `nvidia/cuda:*-runtime` instead of python:3.12-slim.
-#   2. Replace `onnxruntime` with `onnxruntime-gpu` in the install step.
-#   3. Run with `docker run --gpus all ...`.
+# Build:  docker build -t supertonic-server .
+# Run:    docker run --rm -p 8000:8000 -v supertonic-cache:/root/.cache supertonic-server
+#
+# This image runs on every platform (Linux / macOS / Windows containers, x86_64 / arm64).
+# It includes the CPU build of onnxruntime only; CUDA libraries are NOT in this image.
+#
+# For NVIDIA GPU on Linux, build `Dockerfile.cuda` instead — that image bundles
+# onnxruntime-gpu and a CUDA 12 runtime so the container can actually use the GPU.
 
 FROM python:3.12-slim AS base
 
@@ -32,6 +34,8 @@ EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=60s --retries=3 \
     CMD curl -fsS "http://localhost:${SUPERTONIC_PORT}/healthz" || exit 1
 
-# default: CPU on every platform. Override with -e SUPERTONIC_DEVICE=cuda (Linux + onnxruntime-gpu).
+# No CMD that pins --device. The server's default is `--device auto`, which in
+# this image resolves to CPU (CoreML / CUDA execution providers are not installed).
+# Pinning `--device cpu` here used to silently override `-e SUPERTONIC_DEVICE=...`
+# from the environment, which made the GPU story misleading for anyone trying it.
 ENTRYPOINT ["supertonic-server"]
-CMD ["--device", "cpu"]

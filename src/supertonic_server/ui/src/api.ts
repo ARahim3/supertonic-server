@@ -1,4 +1,12 @@
-import type { Format, Health, SpeechParams, SynthesisStats, VoicesResp } from './types';
+import type {
+  Format,
+  Health,
+  MetricsSummary,
+  RecentRecord,
+  SpeechParams,
+  SynthesisStats,
+  VoicesResp,
+} from './types';
 
 const j = (r: Response) => {
   if (!r.ok) throw new Error(`${r.status} ${r.statusText}`);
@@ -7,6 +15,15 @@ const j = (r: Response) => {
 
 export const getHealth = (): Promise<Health> => fetch('/healthz').then(j);
 export const getVoices = (): Promise<VoicesResp> => fetch('/v1/voices').then(j);
+
+export const getMetricsSummary = (signal?: AbortSignal): Promise<MetricsSummary> =>
+  fetch('/metrics/summary', { signal }).then(j);
+
+export const getMetricsRecent = (
+  limit = 50,
+  signal?: AbortSignal,
+): Promise<{ data: RecentRecord[] }> =>
+  fetch(`/metrics/recent?limit=${limit}`, { signal }).then(j);
 
 export type SynthOptions = {
   onTTFB?: (ms: number) => void;

@@ -1,0 +1,78 @@
+# NVIDIA-GPU image for supertonic-server.
+#
+# Build:  docker build -f Dockerfile.cuda -t supertonic-server:cuda .
+# Run:    docker run --rm --gpus all -p 8000:8000 \
+#             -v supertonic-cache:/root/.cache supertonic-server:cuda
+#
+# Host prerequisites (Linux only — Docker Desktop on macOS/Windows can NOT
+# pass through NVIDIA GPUs):
+#   - NVIDIA driver >= 545 (compatible with the CUDA 12.4 runtime below)
+#   - nvidia-container-toolkit installed and registered with the Docker daemon
+#     (see https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/)
+#
+# Verify on the host before building:
+#   docker run --rm --gpus all nvidia/cuda:12.4.1-base-ubuntu22.04 nvidia-smi
+#
+# Verify after building:
+#   docker run --rm --gpus all supertonic-server:cuda --device cuda &
+#   curl http://localhost:8000/healthz
+#   # Server logs should contain: ONNX providers: ['CUDAExecutionProvider', ...]
+
+FROM nvidia/cuda:12.4.1-cudnn-runtime-ubuntu22.04 AS base
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1 \
+    DEBIAN_FRONTEND=noninteractive \
+    SUPERTONIC_HOST=0.0.0.0 \
+    SUPERTONIC_PORT=8000 \
+    SUPERTONIC_DEVICE=cuda
+
+# Ubuntu 22.04 ships Python 3.10; supertonic-server needs 3.11+. Pull 3.12 from
+# the deadsnakes PPA so we don't need to rebuild Python.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        software-properties-common ca-certificates curl gnupg \
+    && add-apt-repository -y ppa:deadsnakes/ppa \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends \
+        python3.12 python3.12-venv libpython3.12 \
+    && rm -rf /var/lib/apt/lists/* \
+    && ln -sf /usr/bin/python3.12 /usr/local/bin/python3 \
+    && ln -sf /usr/bin/python3.12 /usr/local/bin/python \
+    && curl -LsSf https://astral.sh/uv/install.sh | sh \
+    && mv /root/.local/bin/uv /usr/local/bin/uv
+
+WORKDIR /app
+COPY pyproject.toml README.md ./
+COPY src ./src
+
+# Install supertonic-server (pulls onnxruntime CPU as a transitive dep through
+# `supertonic`), then swap it for onnxruntime-gpu. The two distributions share
+# the `onnxruntime` Python namespace, so uninstall-then-install is the right
+# dance. Pin to >=1.19 to match supertonic's floor.
+RUN uv pip install --system --no-cache . \
+    && uv pip uninstall --system onnxruntime \
+    && uv pip install --system --no-cache "onnxruntime-gpu>=1.19.0"
+
+# Build-time sanity check: confirm the GPU wheel actually replaced the CPU one.
+# We check installed distribution metadata (not `get_available_providers()`),
+# because the latter may need a GPU attached and isn't a reliable build-time
+# signal. Runtime confirmation lives in the engine's `ONNX providers: [...]`
+# log line on first start.
+RUN python -c "import importlib.metadata as m; \
+    names = {d.metadata['Name'].lower() for d in m.distributions()}; \
+    has_gpu = 'onnxruntime-gpu' in names; \
+    has_cpu = 'onnxruntime' in names; \
+    print('installed:', sorted(n for n in names if 'onnxruntime' in n)); \
+    assert has_gpu and not has_cpu, \
+    f'CUDA image must have onnxruntime-gpu (and not onnxruntime); got gpu={has_gpu} cpu={has_cpu}'"
+
+EXPOSE 8000
+HEALTHCHECK --interval=30s --timeout=5s --start-period=60s --retries=3 \
+    CMD curl -fsS "http://localhost:${SUPERTONIC_PORT}/healthz" || exit 1
+
+# SUPERTONIC_DEVICE=cuda is set above, and we deliberately don't pin --device
+# via CMD here — the env var is what users expect to control the device, and
+# the previous CMD-overrides-env behaviour was a footgun.
+ENTRYPOINT ["supertonic-server"]
