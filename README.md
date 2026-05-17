@@ -15,41 +15,42 @@
 
 ## Contents
 
-- [At a glance](#at-a-glance) · [vs other open-source TTS servers](#vs-other-open-source-tts-servers)
+- [Performance](#performance--what-to-expect) · [vs other open-source TTS servers](#vs-other-open-source-tts-servers)
 - [Install](#install) · [Quick start](#quick-start-apple-silicon--linux--windows) · [Web console](#web-console) · [Docker](#docker) · [CLI](#cli)
 - [Endpoints](#endpoints) · [WebSocket TTS](#websocket-tts) · [Observability](#observability) · [Voices](#voices) · [Languages](#languages)
 - [Use from: Python SDK](#use-it-from-python-openai-sdk) · [Pipecat](#use-it-from-pipecat) · [LiveKit](#use-it-from-livekit-agents)
-- [Performance](#performance--what-to-expect) · [Tuning](#tuning) · [Troubleshooting](#troubleshooting)
-- [Limitations](#limitations) · [License](#license)
+- [Tuning](#tuning) · [Troubleshooting](#troubleshooting) · [Limitations](#limitations) · [License](#license)
 
-## At a glance
+## Performance — what to expect
 
-| | Supertonic-3 (via this server) |
-|---|---|
-| Model size | ~99M params (ONNX) |
-| Runtime | ONNX Runtime — runs on **CPU**, CoreML (Apple Silicon), or CUDA |
-| Speed | ~6–10× real-time on an M4 Pro CPU/CoreML |
-| Languages | 31 + a `na` fallback |
-| Voices | 10 presets (F1–F5, M1–M5) + OpenAI aliases (`alloy`, `nova`, `echo`, …) |
-| First-byte latency | ~450–650 ms after warmup (default settings) |
-| Privacy | Fully local — no cloud calls |
-| Transports | OpenAI-compatible HTTP **and** a WebSocket endpoint for voice-agent streaming |
-| Observability | In-process ring buffer + Prometheus `/metrics`; live Observatory tab in the web console |
-| Web UI | Built-in console at `/`, with live code-snippet panel for curl / OpenAI / Pipecat / LiveKit |
-| License | MIT code, OpenRAIL-M weights |
+Each row below is **measured**: same 8 mixed-length English utterances sent back-to-back to `POST /v1/audio/speech` (`voice=alloy`, `response_format=pcm`, default `total_steps=8`), aggregates read straight from `GET /metrics/summary`.
+
+| Hardware | TTFB p50 | TTFB p95 | RTF p50 | RTF p95 | ≈ real-time |
+|---|---:|---:|---:|---:|---:|
+| Apple **M4 Pro** · CoreML | 515 ms | 807 ms | 0.166 | 0.255 | ~6× |
+| NVIDIA **RTX 5090** · CUDA | **115 ms** | **119 ms** | **0.034** | **0.070** | **~30×** |
+| Apple M4 Pro · CPU (Docker, `--total-steps 4`) | ~1.6 s | — | ~0.40 | — | ~2.5× |
+
+- **TTFB** = wall-clock from request to first audio byte (lower is better; sub-second feels live for voice agents).
+- **RTF** = synth wall-time ÷ audio duration (lower is better; `0.1` means 10× faster than real-time).
+- The 5090 row's tight p50→p95 spread (only 4 ms) is from CUDA's predictable kernel times; the M4 Pro's CoreML EP shows a wider spread because CoreML partitions the graph and falls back some ops to CPU.
+
+**Warmup.** The server runs one utterance at startup so the first user request doesn't pay graph-compile costs. Typical warmup is **1–3 s** on CoreML (Mac) and **2–3 s** on Ampere/Ada/Hopper NVIDIA cards. The RTX 5090 (Blackwell, sm_120) has a one-time **~60 s first-ever boot** while `onnxruntime-gpu` JIT-builds and caches its kernels under `~/.nv/ComputeCache/`; every boot after that warms in ~2.5 s.
+
+**Tuning lever.** Drop `total_steps` from 8 to 4 for ~50 % faster synthesis with slightly less expressive output. Useful for CPU deployments or for the absolute shortest TTFB.
 
 ## vs other open-source TTS servers
 
-|  | Local | HTTP stream | WebSocket | Metrics | CPU speed | Languages | Quality | Cost |
-|---|:---:|:---:|:---:|:---:|---|:---:|---|---|
-| **supertonic-server** (this) | ✅ | sentence | ✅ | `/metrics` + UI | RTF 0.1–0.2 (M-series) | 31 | high | free |
-| [Kokoro-FastAPI](https://github.com/remsky/Kokoro-FastAPI) | ✅ | sentence | ❌ | ❌ | RTF 0.3–0.5 | ~8 | high | free |
-| [openedai-speech](https://github.com/matatonic/openedai-speech) (Piper) | ✅ | sentence | ❌ | ❌ | RTF 0.05–0.1 | ~30 voices | mid | free |
-| [openedai-speech](https://github.com/matatonic/openedai-speech) (XTTS) | ✅ | sentence | ❌ | ❌ | RTF 1.0–2.0 | 17 | high | free |
-| ElevenLabs API | ❌ | yes | ✅ | n/a (cloud) | n/a (cloud) | 29+ | top | paid |
-| OpenAI TTS API | ❌ | yes | Realtime API | n/a (cloud) | n/a (cloud) | 100+ | high | paid |
+|  | Local | HTTP stream | WebSocket | Metrics | Languages | Quality | Cost |
+|---|:---:|:---:|:---:|:---:|:---:|---|---|
+| **supertonic-server** (this) | ✅ | sentence | ✅ | `/metrics` + UI | 31 | high | free |
+| [Kokoro-FastAPI](https://github.com/remsky/Kokoro-FastAPI) | ✅ | sentence | ❌ | ❌ | ~8 | high | free |
+| [openedai-speech](https://github.com/matatonic/openedai-speech) (Piper) | ✅ | sentence | ❌ | ❌ | ~30 voices | mid | free |
+| [openedai-speech](https://github.com/matatonic/openedai-speech) (XTTS) | ✅ | sentence | ❌ | ❌ | 17 | high | free |
+| ElevenLabs API | ❌ | yes | ✅ | n/a (cloud) | 29+ | top | paid |
+| OpenAI TTS API | ❌ | yes | Realtime API | n/a (cloud) | 100+ | high | paid |
 
-"HTTP stream = sentence" means audio is emitted to the client as each sentence finishes synthesizing — what Pipecat and LiveKit consume natively. The **WebSocket** transport adds a persistent connection with text-delta input and `cancel`-based interruption — useful for LLM → TTS pipelines in voice agents.
+"HTTP stream = sentence" means audio is emitted to the client as each sentence finishes synthesizing — what Pipecat and LiveKit consume natively. The **WebSocket** transport adds a persistent connection with text-delta input and `cancel`-based interruption — useful for LLM → TTS pipelines in voice agents. Speed numbers are above in the [Performance](#performance--what-to-expect) section.
 
 ## Install
 
@@ -375,24 +376,6 @@ tts = openai.TTS(
     voice="nova",
 )
 ```
-
-## Performance — what to expect
-
-Each row below is **measured**: same 8 mixed-length English utterances sent back-to-back to `POST /v1/audio/speech` (`voice=alloy`, `response_format=pcm`, default `total_steps=8`), aggregates read straight from `GET /metrics/summary`.
-
-| Hardware | TTFB p50 | TTFB p95 | RTF p50 | RTF p95 | ≈ real-time |
-|---|---:|---:|---:|---:|---:|
-| Apple **M4 Pro** · CoreML | 515 ms | 807 ms | 0.166 | 0.255 | ~6× |
-| NVIDIA **RTX 5090** · CUDA | **115 ms** | **119 ms** | **0.034** | **0.070** | **~30×** |
-| Apple M4 Pro · CPU (Docker, `--total-steps 4`) | ~1.6 s | — | ~0.40 | — | ~2.5× |
-
-- **TTFB** = wall-clock from request to first audio byte (lower is better; sub-second feels live for voice agents).
-- **RTF** = synth wall-time ÷ audio duration (lower is better; `0.1` means 10× faster than real-time).
-- The 5090 row's tight p50→p95 spread (only 4 ms) is from CUDA's predictable kernel times; the M4 Pro's CoreML EP shows a wider spread because CoreML partitions the graph and falls back some ops to CPU.
-
-**Warmup.** The server runs one utterance at startup so the first user request doesn't pay graph-compile costs. Typical warmup is **1–3 s** on CoreML (Mac) and **2–3 s** on Ampere/Ada/Hopper NVIDIA cards. The RTX 5090 (Blackwell, sm_120) has a one-time **~60 s first-ever boot** while `onnxruntime-gpu` JIT-builds and caches its kernels under `~/.nv/ComputeCache/`; every boot after that warms in ~2.5 s.
-
-**Tuning lever.** Drop `total_steps` from 8 to 4 for ~50 % faster synthesis with slightly less expressive output. Useful for CPU deployments or for the absolute shortest TTFB.
 
 ## Tuning
 
