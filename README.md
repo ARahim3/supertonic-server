@@ -268,6 +268,8 @@ Disable the endpoint with `SUPERTONIC_WS_ENABLED=0`.
 
 Cloud TTS APIs can't show you what's happening server-side. We run locally — we can. Every synthesis (HTTP **or** WebSocket) is recorded in an in-process ring buffer (configurable, default 100), with live percentile aggregates and three endpoints to read them.
 
+![Observatory tab — live aggregates, p50/p95/p99 cards, and a waterfall feed of recent requests](docs/screenshots/observe.png)
+
 ### `GET /metrics` — Prometheus text exposition
 
 Scrape it from Prometheus / Grafana / Datadog Agent / anything that speaks the text format. No client lib required.
